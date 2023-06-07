@@ -23,13 +23,17 @@ const fakeData = {
 
 describe("BatchDeposit", function () {
   let accounts;
-  let contract;
+  let batchContract;
 
   before(async () => {
     accounts = await ethers.getSigners();
+    const DepositContract = await ethers.getContractFactory("DepositContract");
+    const depositContract = await DepositContract.deploy();
+    await depositContract.deployed();
+
     const BatchDeposit = await ethers.getContractFactory("BatchDeposit");
-    contract = await BatchDeposit.deploy();
-    await contract.deployed();
+    batchContract = await BatchDeposit.deploy(depositContract.address, fee);
+    await batchContract.deployed();
   });
 
   it("can perform multiple deposits in one tx", async () => {
@@ -37,7 +41,7 @@ describe("BatchDeposit", function () {
     const stakefishFee = fee.mul(BigNumber.from(3));
     const totalAmount = amountEth.add(stakefishFee);
 
-    const tx = await contract
+    const tx = await batchContract
       .connect(accounts[1])
       .batchDeposit(
         fakeData.pubkeys,
@@ -53,13 +57,13 @@ describe("BatchDeposit", function () {
     assert.equal(receipt.events?.length, 4, "events are not 4 as expected!");
 
     assert.equal(
-      (await ethers.provider.getBalance(contract.address)).toString(),
+      (await ethers.provider.getBalance(batchContract.address)).toString(),
       stakefishFee.toString(),
       "fee was not collected by the smart contract"
     );
 
     assert.equal(
-      await contract.owner(),
+      await batchContract.owner(),
       accounts[0].address,
       "contract owner is wrong"
     );
@@ -68,8 +72,8 @@ describe("BatchDeposit", function () {
   it("should revert if amount is not enough", async () => {
     const amountEth = ethers.utils.parseEther("10");
 
-    await assert.revert(
-      contract
+    await assert(
+        batchContract
         .connect(accounts[2])
         .batchDeposit(
           fakeData.pubkeys,
@@ -87,8 +91,8 @@ describe("BatchDeposit", function () {
   it("should revert if fee is missing", async () => {
     const amountEth = ethers.utils.parseEther("96");
 
-    await assert.revert(
-      contract
+    await assert(
+        batchContract
         .connect(accounts[2])
         .batchDeposit(
           fakeData.pubkeys,
@@ -105,37 +109,37 @@ describe("BatchDeposit", function () {
 
   it("should change owner", async () => {
     assert.equal(
-      await contract.owner(),
+      await batchContract.owner(),
       accounts[0].address,
       "contract owner is wrong"
     );
 
-    await contract.connect(accounts[0]).transferOwnership(accounts[2].address);
+    await batchContract.connect(accounts[0]).transferOwnership(accounts[2].address);
 
     assert.equal(
-      await contract.owner(),
+      await batchContract.owner(),
       accounts[2].address,
       "contract owner is not changed"
     );
   });
 
   it("should not withdraw", async () => {
-    await assert.revert(
-      contract.connect(accounts[1]).withdraw(accounts[6].address),
+    await assert(
+        batchContract.connect(accounts[1]).withdraw(accounts[6].address),
       "Ownable: caller is not the owner"
     );
   });
 
   it("should withdraw the fees", async () => {
-    const fees = await ethers.provider.getBalance(contract.address);
+    const fees = await ethers.provider.getBalance(batchContract.address);
     const curBal = await ethers.provider.getBalance(accounts[6].address);
 
-    const tx = await contract.connect(accounts[2]).withdraw(accounts[6].address);
+    const tx = await batchContract.connect(accounts[2]).withdraw(accounts[6].address);
     const receipt = await tx.wait();
     assert.equal(receipt.events?.length, 1, "events are not 1 as expected!");
 
     assert.equal(
-      (await ethers.provider.getBalance(contract.address)).toString(),
+      (await ethers.provider.getBalance(batchContract.address)).toString(),
       "0",
       "contract balance is not 0"
     );
