@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -8,13 +8,15 @@ contract ClaimRewards is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant STAKER_ROLE = keccak256("STAKER_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
+    address private admin;
 
     mapping (address => uint256) public rewards;
-
-    constructor(address admin) {
-        _setupRole(ADMIN_ROLE, admin);
-        _setRoleAdmin(STAKER_ROLE, ADMIN_ROLE);
-        _setRoleAdmin(VALIDATOR_ROLE, ADMIN_ROLE);
+    
+    constructor(address _admin) {
+        _setupRole(ADMIN_ROLE, _admin);
+        _setupRole(STAKER_ROLE, _admin);
+        _setupRole(VALIDATOR_ROLE, _admin);
+        admin = _admin;
     }
 
     function depositReward(address staker, uint256 amount) external {
@@ -37,7 +39,7 @@ contract ClaimRewards is AccessControl, ReentrancyGuard {
         _claimReward(staker);
     }
 
-    function _claimReward(address staker) private ReentrancyGuard {
+    function _claimReward(address staker) private nonReentrant() {
         require(rewards[staker] > 0, "No reward to claim");
 
         uint256 reward = rewards[staker];
@@ -46,7 +48,7 @@ contract ClaimRewards is AccessControl, ReentrancyGuard {
         uint256 adminPart = (reward * 25) / 100;
         uint256 stakerPart = reward - adminPart;
 
-        (bool adminPay, ) = getRoleMember(ADMIN_ROLE, 0).call{value: adminPart}("");
+        (bool adminPay, ) = admin.call{value: adminPart}("");
         require(adminPay, "Admin payment failed");
 
         (bool stakerPay, ) = staker.call{value: stakerPart}("");
